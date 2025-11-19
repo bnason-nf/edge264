@@ -1236,8 +1236,10 @@ int ADD_VARIANT(parse_slice_layer_without_partitioning)(Edge264Decoder *dec, int
 	dec->task_dependencies[task_id] = refs_to_mask(t);
 	dec->ready_tasks |= ((dec->task_dependencies[task_id] & ~ready_frames(dec)) == 0) << task_id;
 	dec->taskPics[task_id] = dec->currPic;
+#ifdef HAS_LOGS
 	if (!dec->n_threads && dec->worker_loop == worker_loop_log)
 		log_dec(dec, t->pps.entropy_coding_mode_flag ? "  macroblocks_cabac:\n" : "  macroblocks_cavlc:\n");
+#endif
 	if ((ret = print_dec(dec)))
 		return ret;
 	if (!dec->n_threads)

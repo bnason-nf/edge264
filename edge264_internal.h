@@ -711,7 +711,17 @@ static always_inline const char *unsup_if(int cond) { return cond ? " # unsuppor
 #define loada32x4(p0, p1, p2, p3) (i32x4){*(int32_t *)(p0), *(int32_t *)(p1), *(int32_t *)(p2), *(int32_t *)(p3)}
 #define loada64x2(p0, p1) (i64x2){*(int64_t *)(p0), *(int64_t *)(p1)}
 #if defined(__SSE2__)
+#if defined(__wasm__)
+	#include <xmmintrin.h>
+	#include <emmintrin.h>
+	#include <pmmintrin.h>
+	#include <tmmintrin.h>
+	#include <smmintrin.h>
+	#include <nmmintrin.h>
 	#include <immintrin.h>
+#else
+	#include <immintrin.h>
+#endif
 	#define adds16(a, b) (i16x8)_mm_adds_epi16(a, b)
 	#define addu8(a, b) (i8x16)_mm_adds_epu8(a, b)
 	#define avgu8(a, b) (i8x16)_mm_avg_epu8(a, b)

@@ -9,9 +9,21 @@ option(BUILD_VARIANT_V3 "Build the x86-64-v3 variant" OFF)
 
 set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS 1) # export every function in the Windows DLL for now
 
-add_library("edge264"
-	${CMAKE_CURRENT_SOURCE_DIR}/edge264.c
-)
+if(EMSCRIPTEN)
+	message(STATUS "Building with Emscripten")
+	set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
+	set(BUILD_VARIANT_LOGS OFF CACHE BOOL "" FORCE)
+	set(BUILD_VARIANT_V2 OFF CACHE BOOL "" FORCE)
+	set(BUILD_VARIANT_V3 OFF CACHE BOOL "" FORCE)
+	add_executable("edge264"
+		${CMAKE_CURRENT_SOURCE_DIR}/edge264.c
+		# ${CMAKE_CURRENT_SOURCE_DIR}/edge264_headers.c
+	)
+else()
+	add_library("edge264"
+		${CMAKE_CURRENT_SOURCE_DIR}/edge264.c
+	)
+endif()
 target_include_directories("edge264"
 	PUBLIC
 		$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
@@ -20,6 +32,35 @@ target_include_directories("edge264"
 set_target_properties("edge264" PROPERTIES
 	C_STANDARD 11
 )
+
+if(EMSCRIPTEN)
+	target_compile_definitions("edge264"
+		PRIVATE
+			__i386__
+			__x86_64__
+	)
+	target_compile_options("edge264"
+		PRIVATE
+			-msimd128
+			-msse
+			-msse2
+			-msse3
+			-mssse3
+			-msse4.1
+			-msse4.2
+			-mavx
+			-mavx2
+			-Wno-initializer-overrides
+	)
+	target_link_options("edge264"
+		PRIVATE
+			-lexports.js
+			--no-entry
+			--profiling
+			-sEXPORTED_FUNCTIONS=_malloc,_free,_edge264_find_start_code,_edge264_alloc,_edge264_flush,_edge264_free,_edge264_decode_NAL,_edge264_get_frame,_edge264_return_frame
+			-sSTRICT=1
+	)
+endif()
 
 find_package(Threads)
 if(NOT Threads_FOUND OR NOT CMAKE_USE_PTHREADS_INIT)
