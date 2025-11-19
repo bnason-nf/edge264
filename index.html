@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>WebAssembly H.264 Video Player Demo</title>
+        <style>
+            body {
+                margin: 0;
+                padding: 10px;
+                font-family: Arial, sans-serif;
+                background-color: #1a1a1a;
+                color: white;
+            }
+
+            .container {
+                max-width: 1200px;
+                margin: 0 auto;
+            }
+
+            h1 {
+                text-align: center;
+                margin-bottom: 15px;
+                font-size: 1.5em;
+            }
+
+            .controls {
+                background-color: #2a2a2a;
+                padding: 10px;
+                border-radius: 4px;
+                margin-bottom: 10px;
+            }
+
+            .control-group {
+                margin-bottom: 8px;
+                display: flex;
+                align-items: center;
+                gap: 5px;
+                flex-wrap: nowrap;
+            }
+
+            label {
+                font-weight: bold;
+                font-size: 0.9em;
+                white-space: nowrap;
+                flex-shrink: 0;
+            }
+
+            input {
+                padding: 3px;
+                border: 1px solid #555;
+                background-color: #333;
+                color: white;
+                border-radius: 3px;
+                font-size: 0.9em;
+            }
+
+            input[type="number"] {
+                width: 100px;
+                flex-shrink: 0;
+            }
+
+            input[type="text"] {
+                flex: 1;
+                min-width: 100px;
+            }
+
+            input[type="file"] {
+                color: white;
+                background-color: #333;
+                border: 1px solid #555;
+                border-radius: 3px;
+                padding: 0;
+                font-size: 0.9em;
+                width: 500px;
+            }
+
+            input[type="file"]::file-selector-button {
+                background-color: #0982e5;
+                color: white;
+                border: none;
+                padding: 6px 12px;
+                border-radius: 3px 0 0 3px;
+                cursor: pointer;
+                font-size: 14px;
+                border-right: 1px solid #555;
+                margin-right: 0;
+            }
+
+            button {
+                background-color: #0982e5;
+                color: white;
+                border: none;
+                padding: 6px 8px;
+                border-radius: 3px;
+                cursor: pointer;
+                font-size: 12px;
+                white-space: nowrap;
+            }
+
+            button:hover {
+                background-color: #0646f4;
+            }
+
+            button:disabled,
+            input[type="file"]:disabled::file-selector-button {
+                background-color: #666;
+                cursor: not-allowed;
+            }
+
+            input[type="file"]:disabled {
+                cursor: not-allowed;
+            }
+
+            .canvas-container {
+                text-align: center;
+                background-color: #000;
+                border-radius: 8px;
+                padding: 10px;
+            }
+
+            canvas {
+                max-width: 100%;
+                height: auto;
+                border: 2px solid #333;
+            }
+
+            .status,
+            .webgpu-check {
+                margin-top: 10px;
+                padding: 6px;
+                border-radius: 3px;
+                font-size: 0.9em;
+            }
+
+            .status {
+                display: none;
+            }
+
+            .status.error,
+            .webgpu-not-supported {
+                background-color: #d32f2f;
+                display: block;
+            }
+
+            .status.success,
+            .webgpu-supported {
+                background-color: #388e3c;
+                display: block;
+            }
+
+            .status.info {
+                background-color: #1976d2;
+                display: block;
+            }
+
+            .webgpu-check {
+                margin-bottom: 10px;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>WebAssembly H.264 Video Player Demo</h1>
+
+            <div class="controls">
+                <h4 style="margin: 0 0 8px 0">Video Settings</h4>
+                <div class="control-group">
+                    <label for="video-url">Video File:</label>
+                    <input type="text" id="video-url" placeholder="Enter URL or select local file..." />
+                    <button
+                        type="button"
+                        onclick="selectVideoFile()"
+                        style="padding: 5px 10px; font-size: 14px; flex-shrink: 0"
+                    >
+                        Browse...
+                    </button>
+                    <button
+                        type="button"
+                        onclick="clearVideoFile()"
+                        style="padding: 5px 10px; font-size: 14px; flex-shrink: 0"
+                    >
+                        Clear
+                    </button>
+                </div>
+
+                <!--
+                <div class="control-group">
+                    <label for="alpha-url">Alpha File:</label>
+                    <input type="text" id="alpha-url" placeholder="Enter URL or select local file..." />
+                    <button
+                        type="button"
+                        onclick="selectAlphaFile()"
+                        style="padding: 5px 10px; font-size: 14px; flex-shrink: 0"
+                    >
+                        Browse...
+                    </button>
+                    <button
+                        type="button"
+                        onclick="clearAlphaFile()"
+                        style="padding: 5px 10px; font-size: 14px; flex-shrink: 0"
+                    >
+                        Clear
+                    </button>
+                </div>
+                -->
+
+                <div class="control-group">
+                    <label for="frame-rate">Frame Rate:</label>
+                    <input type="number" id="frame-rate" min="1" max="60" />
+                </div>
+
+                <button id="load-btn" onclick="loadVideo()">Load Video</button>
+            </div>
+
+            <div class="canvas-container">
+                <canvas id="canvas" width="1280" height="720"></canvas>
+            </div>
+
+            <div id="webgpu-status" class="webgpu-check">
+                <strong>WebGPU Status:</strong> <span id="webgpu-message">Checking...</span>
+            </div>
+
+            <div id="status" class="status">
+                <span id="status-message"></span>
+            </div>
+        </div>
+
+        <script>
+            const alphaUrlElement = document.getElementById("alpha-url");
+            const hasAlphaSupport = !!alphaUrlElement;
+
+            // Check WebGPU support
+            function checkWebGPUSupport() {
+                const statusEl = document.getElementById("webgpu-status");
+                const messageEl = document.getElementById("webgpu-message");
+
+                if (navigator.gpu) {
+                    statusEl.className = "webgpu-check webgpu-supported";
+                    messageEl.textContent = "WebGPU is supported!";
+                    console.log("[WASM_TEST] WebGPU is supported in this browser.");
+                    return true;
+                } else {
+                    statusEl.className = "webgpu-check webgpu-not-supported";
+                    messageEl.textContent =
+                        "WebGPU is not supported in this browser. Please use Chrome 113+ or Firefox with WebGPU enabled.";
+                    console.error("[WASM_TEST] WebGPU is NOT supported in this browser.");
+                    return false;
+                }
+            }
+
+            function showStatus(message, type = "info") {
+                const statusEl = document.getElementById("status");
+                const messageEl = document.getElementById("status-message");
+
+                messageEl.textContent = message;
+                statusEl.className = `status ${type}`;
+            }
+
+            function updateButtonStates(loading) {
+                document.getElementById("load-btn").disabled = loading;
+
+                // Disable all controls only while loading
+                document.getElementById("video-url").disabled = loading;
+                if (hasAlphaSupport) {
+                    alphaUrlElement.disabled = loading;
+                }
+                document.getElementById("frame-rate").disabled = loading;
+
+                // Disable browse/clear buttons only while loading
+                const buttons = document.querySelectorAll("button:not(#load-btn)");
+                buttons.forEach((btn) => (btn.disabled = loading));
+            }
+
+            function buildQueryString() {
+                const frameRate = document.getElementById("frame-rate").value;
+                const videoUrl = document.getElementById("video-url").value.trim();
+                const alphaUrl = hasAlphaSupport ? alphaUrlElement.value.trim() : "";
+
+                const params = new URLSearchParams();
+
+                // Add file information from text inputs
+                if (videoUrl) {
+                    params.set("filename", videoUrl);
+                }
+                if (alphaUrl) {
+                    params.set("alphaFilename", alphaUrl);
+                }
+
+                if (frameRate) {
+                    params.set("frameRate", frameRate);
+                }
+
+                return params.toString();
+            }
+
+            let currentVideoScript = null;
+
+            // Hidden file input elements for file selection dialogs
+            const hiddenVideoInput = document.createElement("input");
+            hiddenVideoInput.type = "file";
+            hiddenVideoInput.accept = ".h264,.264";
+            hiddenVideoInput.style.display = "none";
+            document.body.appendChild(hiddenVideoInput);
+
+            let hiddenAlphaInput = null;
+            if (hasAlphaSupport) {
+                hiddenAlphaInput = document.createElement("input");
+                hiddenAlphaInput.type = "file";
+                hiddenAlphaInput.accept = ".h264,.264";
+                hiddenAlphaInput.style.display = "none";
+                document.body.appendChild(hiddenAlphaInput);
+            }
+
+            function selectVideoFile() {
+                hiddenVideoInput.click();
+            }
+
+            function selectAlphaFile() {
+                if (hiddenAlphaInput) {
+                    hiddenAlphaInput.click();
+                }
+            }
+
+            // Store selected files globally for index.js compatibility
+            window.selectedVideoFile = null;
+            window.selectedAlphaFile = null;
+
+            function handleVideoFileSelect(event) {
+                const file = event.target.files[0];
+                if (file) {
+                    window.selectedVideoFile = file;
+                    document.getElementById("video-url").value = `local://${file.name}`;
+                    showStatus(`Video file selected: ${file.name}`, "success");
+                }
+            }
+
+            function handleAlphaFileSelect(event) {
+                if (!hasAlphaSupport) return;
+                const file = event.target.files[0];
+                if (file) {
+                    window.selectedAlphaFile = file;
+                    alphaUrlElement.value = `local://${file.name}`;
+                    showStatus(`Alpha file selected: ${file.name}`, "success");
+                }
+            }
+
+            function clearVideoFile() {
+                window.selectedVideoFile = null;
+                document.getElementById("video-url").value = "";
+                showStatus("Video file cleared", "info");
+            }
+
+            function clearAlphaFile() {
+                if (!hasAlphaSupport) {
+                    return;
+                }
+                window.selectedAlphaFile = null;
+                alphaUrlElement.value = "";
+                showStatus("Alpha file cleared", "info");
+            }
+
+            async function loadVideo() {
+                if (!checkWebGPUSupport()) {
+                    showStatus("WebGPU is required but not supported in this browser", "error");
+                    return;
+                }
+
+                const videoUrl = document.getElementById("video-url").value.trim();
+                if (!videoUrl) {
+                    showStatus("Please enter a video URL or select a file", "error");
+                    return;
+                }
+
+                try {
+                    showStatus("Loading video...", "info");
+                    updateButtonStates(true);
+
+                    const queryString = buildQueryString();
+                    const newUrl = window.location.pathname + (queryString ? "?" + queryString : "");
+                    window.history.replaceState({}, "", newUrl);
+
+                    // If the script is already loaded, call initVideoPlayer directly
+                    if (typeof window.initVideoPlayer === "function") {
+                        await window.initVideoPlayer();
+                        showStatus("Video player loaded successfully!", "success");
+                        updateButtonStates(false);
+                    } else {
+                        // First time: load the script
+                        currentVideoScript = document.createElement("script");
+                        currentVideoScript.src = "./index.js";
+                        currentVideoScript.onload = () => {
+                            showStatus("Video player loaded successfully!", "success");
+                            updateButtonStates(false);
+                        };
+                        currentVideoScript.onerror = (error) => {
+                            showStatus("Failed to load video player script: " + error.message, "error");
+                            updateButtonStates(false);
+                        };
+
+                        document.head.appendChild(currentVideoScript);
+                    }
+                } catch (error) {
+                    showStatus("Error: " + error.message, "error");
+                    updateButtonStates(false);
+                }
+            }
+
+            document.addEventListener("DOMContentLoaded", () => {
+                checkWebGPUSupport();
+
+                hiddenVideoInput.addEventListener("change", handleVideoFileSelect);
+                if (hasAlphaSupport && hiddenAlphaInput) {
+                    hiddenAlphaInput.addEventListener("change", handleAlphaFileSelect);
+                }
+
+                const params = new URLSearchParams(window.location.search);
+
+                // Clear query parameters containing "local:" paths
+                let paramsCleaned = false;
+                if (params.get("filename") && params.get("filename").startsWith("local:")) {
+                    params.delete("filename");
+                    paramsCleaned = true;
+                }
+                if (params.get("alphaFilename") && params.get("alphaFilename").startsWith("local:")) {
+                    params.delete("alphaFilename");
+                    paramsCleaned = true;
+                }
+
+                // Update URL if parameters were cleaned
+                if (paramsCleaned) {
+                    const newUrl = window.location.pathname + (params.toString() ? "?" + params.toString() : "");
+                    window.history.replaceState({}, "", newUrl);
+                }
+
+                // Load URLs from query parameters into text inputs
+                if (params.get("filename")) {
+                    document.getElementById("video-url").value = params.get("filename");
+                }
+                if (hasAlphaSupport && params.get("alphaFilename")) {
+                    alphaUrlElement.value = params.get("alphaFilename");
+                }
+
+                if (params.get("frameRate")) {
+                    document.getElementById("frame-rate").value = params.get("frameRate");
+                }
+
+                // Auto-load video if filename is provided
+                if (params.get("filename")) {
+                    // Small delay to ensure UI is ready
+                    setTimeout(() => {
+                        loadVideo();
+                    }, 100);
+                }
+            });
+        </script>
+    </body>
+</html>

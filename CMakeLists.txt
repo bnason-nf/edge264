@@ -57,8 +57,31 @@ if(EMSCRIPTEN)
 			-lexports.js
 			--no-entry
 			--profiling
+			-sALLOW_MEMORY_GROWTH=1
 			-sEXPORTED_FUNCTIONS=_malloc,_free,_edge264_find_start_code,_edge264_alloc,_edge264_flush,_edge264_free,_edge264_decode_NAL,_edge264_get_frame,_edge264_return_frame
 			-sSTRICT=1
+	)
+
+	add_custom_command(
+		COMMENT "Copying index.js"
+		DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/index.js
+		OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/index.js
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_CURRENT_SOURCE_DIR}/index.js ${CMAKE_CURRENT_BINARY_DIR}/index.js
+	)
+
+	add_custom_command(
+		COMMENT "Copying index.html"
+		DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/index.html
+		OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/index.html
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_CURRENT_SOURCE_DIR}/index.html ${CMAKE_CURRENT_BINARY_DIR}/index.html
+	)
+
+	add_custom_target(
+		edge264-files
+		ALL
+		DEPENDS
+			${CMAKE_CURRENT_BINARY_DIR}/index.html
+			${CMAKE_CURRENT_BINARY_DIR}/index.js
 	)
 endif()
 
@@ -143,22 +166,22 @@ if(CMAKE_USE_PTHREADS_INIT)
 	list(APPEND IMPLICITS_LIST "-lpthread")
 endif()
 foreach(LIB ${CMAKE_C_IMPLICIT_LINK_LIBRARIES})
-    if(IS_ABSOLUTE ${LIB} AND EXISTS ${LIB})
-        list(APPEND IMPLICITS_LIST "${LIB}")
-    elseif(${LIB} MATCHES "-l:libunwind.a") # android toolchain
-        list(APPEND IMPLICITS_LIST "-lunwind")
-    else()
-        list(APPEND IMPLICITS_LIST "-l${LIB}")
-    endif()
+	if(IS_ABSOLUTE ${LIB} AND EXISTS ${LIB})
+		list(APPEND IMPLICITS_LIST "${LIB}")
+	elseif(${LIB} MATCHES "-l:libunwind.a") # android toolchain
+		list(APPEND IMPLICITS_LIST "-lunwind")
+	else()
+		list(APPEND IMPLICITS_LIST "-l${LIB}")
+	endif()
 endforeach()
 if(IMPLICITS_LIST)
-    # blacklist of libraries that should not be in Libs.private
-    list(REMOVE_ITEM IMPLICITS_LIST "-lmingwex"
-         "-lmingw32" "-lmoldname" "-lmsvcrt" "-ladvapi32" "-lshell32"
-         "-luser32" "-lkernel32")
-    string(REPLACE ";" " " EDGE264_LINK_LIBS "${IMPLICITS_LIST}")
+	# blacklist of libraries that should not be in Libs.private
+	list(REMOVE_ITEM IMPLICITS_LIST "-lmingwex"
+		 "-lmingw32" "-lmoldname" "-lmsvcrt" "-ladvapi32" "-lshell32"
+		 "-luser32" "-lkernel32")
+	string(REPLACE ";" " " EDGE264_LINK_LIBS "${IMPLICITS_LIST}")
 else()
-    set(EDGE264_LINK_LIBS "")
+	set(EDGE264_LINK_LIBS "")
 endif(IMPLICITS_LIST)
 
 configure_file(edge264.pc.in edge264.pc @ONLY)
